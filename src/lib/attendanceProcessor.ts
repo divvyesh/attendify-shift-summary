@@ -438,45 +438,87 @@ function calculateAttendance(punchRecords: PunchRecord[], scheduleRecords: Sched
   const TARDY_MINUTES = 5;
   const EARLY_MINUTES = 15;
   
-  scheduleRecords.forEach(schedRecord => {
+  console.log('\n=== ATTENDANCE CALCULATION DEBUG ===');
+  console.log('Schedule records:', scheduleRecords.length);
+  console.log('Punch records:', punchRecords.length);
+  
+  scheduleRecords.forEach((schedRecord, index) => {
     const matchingPunch = punchRecords.find(p => p.date === schedRecord.date);
     
+    console.log(`\n--- Day ${index + 1}: ${schedRecord.date} (${schedRecord.shift_type}) ---`);
+    console.log('Schedule:', schedRecord.sched_start_dt.toLocaleTimeString(), 'to', schedRecord.sched_end_dt.toLocaleTimeString());
+    
     const schedMinutes = (schedRecord.sched_end_dt.getTime() - schedRecord.sched_start_dt.getTime()) / (1000 * 60);
+    console.log('Scheduled minutes:', schedMinutes);
     
     let actualIn = matchingPunch?.in1 || null;
     let actualOut = matchingPunch?.out2 || null;
     let actualOut1 = matchingPunch?.out1 || null;
     let actualIn2 = matchingPunch?.in2 || null;
     
+    console.log('Punches - IN1:', actualIn?.toLocaleTimeString() || 'none', 
+                'OUT1:', actualOut1?.toLocaleTimeString() || 'none',
+                'IN2:', actualIn2?.toLocaleTimeString() || 'none', 
+                'OUT2:', actualOut?.toLocaleTimeString() || 'none');
+    
     const present = actualIn !== null;
     let workedMinutes = 0;
+    let lunchMinutes = 0;
     let tardy = false;
     let earlyDismissal = false;
     
     if (present && actualOut) {
-      // Calculate lunch break
-      let lunchMinutes = 0;
-      if (actualOut1 && actualIn2 && actualIn2.getTime() > actualOut1.getTime()) {
-        lunchMinutes = (actualIn2.getTime() - actualOut1.getTime()) / (1000 * 60);
+      // Handle cross-midnight for PM shifts
+      let adjustedOut = actualOut;
+      if (schedRecord.shift_type === 'PM' && actualOut.getTime() < actualIn!.getTime()) {
+        adjustedOut = new Date(actualOut.getTime() + 24 * 60 * 60 * 1000);
+        console.log('Adjusted OUT2 for cross-midnight:', adjustedOut.toLocaleTimeString());
       }
       
-      // Calculate total worked time
-      const totalMinutes = (actualOut.getTime() - actualIn!.getTime()) / (1000 * 60);
+      // Calculate lunch break (OUT1 to IN2)
+      if (actualOut1 && actualIn2) {
+        let adjustedIn2 = actualIn2;
+        // Handle cross-midnight for lunch return
+        if (schedRecord.shift_type === 'PM' && actualIn2.getTime() < actualOut1.getTime()) {
+          adjustedIn2 = new Date(actualIn2.getTime() + 24 * 60 * 60 * 1000);
+        }
+        
+        if (adjustedIn2.getTime() > actualOut1.getTime()) {
+          lunchMinutes = (adjustedIn2.getTime() - actualOut1.getTime()) / (1000 * 60);
+        }
+      }
+      
+      // Calculate total worked time (IN1 to OUT2 minus lunch)
+      const totalMinutes = (adjustedOut.getTime() - actualIn!.getTime()) / (1000 * 60);
       workedMinutes = Math.max(0, totalMinutes - lunchMinutes);
       
-      // Check tardiness (more than 5 minutes late)
-      if (actualIn.getTime() > schedRecord.sched_start_dt.getTime() + (TARDY_MINUTES * 60 * 1000)) {
+      console.log('Total span minutes:', totalMinutes.toFixed(2));
+      console.log('Lunch minutes:', lunchMinutes.toFixed(2));
+      console.log('Worked minutes:', workedMinutes.toFixed(2));
+      
+      // Check tardiness (arrived more than 5 minutes after scheduled start)
+      const lateMinutes = (actualIn.getTime() - schedRecord.sched_start_dt.getTime()) / (1000 * 60);
+      if (lateMinutes > TARDY_MINUTES) {
         tardy = true;
+        console.log('TARDY: Late by', lateMinutes.toFixed(1), 'minutes');
       }
       
-      // Check early dismissal (more than 15 minutes early)
-      if (actualOut.getTime() < schedRecord.sched_end_dt.getTime() - (EARLY_MINUTES * 60 * 1000)) {
+      // Check early dismissal (left more than 15 minutes before scheduled end)
+      const earlyMinutes = (schedRecord.sched_end_dt.getTime() - adjustedOut.getTime()) / (1000 * 60);
+      if (earlyMinutes > EARLY_MINUTES) {
         earlyDismissal = true;
+        console.log('EARLY DISMISSAL: Left', earlyMinutes.toFixed(1), 'minutes early');
       }
+    } else {
+      console.log('ABSENT: No punch data');
     }
     
+    // Clip worked minutes to scheduled minutes (can't work more than scheduled)
     const workedMinutesClipped = Math.min(Math.max(0, workedMinutes), schedMinutes);
     const attendanceFraction = schedMinutes > 0 ? workedMinutesClipped / schedMinutes : 0;
+    
+    console.log('Worked minutes clipped:', workedMinutesClipped.toFixed(2));
+    console.log('Attendance fraction:', (attendanceFraction * 100).toFixed(1) + '%');
     
     dayRecords.push({
       date: schedRecord.date,
@@ -508,6 +550,16 @@ function calculateAttendance(punchRecords: PunchRecord[], scheduleRecords: Sched
   
   const attendancePctShifts = scheduledShifts > 0 ? (shiftsWorked / scheduledShifts) * 100 : 0;
   const attendancePctHours = scheduledHours > 0 ? (workedHours / scheduledHours) * 100 : 0;
+  
+  console.log('\n=== SUMMARY CALCULATION ===');
+  console.log('Scheduled shifts:', scheduledShifts);
+  console.log('Shifts worked:', shiftsWorked);
+  console.log('Attendance % (shifts):', attendancePctShifts.toFixed(2) + '%');
+  console.log('Scheduled hours:', scheduledHours.toFixed(2));
+  console.log('Worked hours:', workedHours.toFixed(2));
+  console.log('Attendance % (hours):', attendancePctHours.toFixed(2) + '%');
+  console.log('Tardy count:', tardyCount);
+  console.log('Early dismissal count:', earlyDismissalCount);
   
   const summary: AttendanceSummary = {
     scheduled_shifts: scheduledShifts,

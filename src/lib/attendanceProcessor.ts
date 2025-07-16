@@ -213,25 +213,38 @@ function parsePunchFile(file: ArrayBuffer): { records: PunchRecord[], employee: 
     }
   }
   
-  if (records.length === 0) {
-    throw new Error('No punch records found in file');
-  }
-  
-  // Find most frequent employee name
+  // Find most frequent employee name (works for any employee)
   const employeeCounts: { [name: string]: number } = {};
   records.forEach(record => {
-    employeeCounts[record.employee_name_raw] = (employeeCounts[record.employee_name_raw] || 0) + 1;
+    if (record.employee_name_raw && record.employee_name_raw.trim()) {
+      const cleanName = record.employee_name_raw.trim().toUpperCase();
+      employeeCounts[cleanName] = (employeeCounts[cleanName] || 0) + 1;
+    }
   });
+  
+  if (Object.keys(employeeCounts).length === 0) {
+    throw new Error('No employee names found in punch file');
+  }
   
   const employee = Object.keys(employeeCounts).reduce((a, b) => 
     employeeCounts[a] > employeeCounts[b] ? a : b
   );
   
-  return { records, employee, warnings };
+  console.log('Detected employee names:', Object.keys(employeeCounts));
+  console.log('Using most frequent employee:', employee);
+  
+  // Filter records to only include the detected employee (important for multi-employee files)
+  const filteredRecords = records.filter(record => 
+    record.employee_name_raw && record.employee_name_raw.trim().toUpperCase() === employee
+  );
+  
+  console.log(`Filtered to ${filteredRecords.length} records for employee: ${employee}`);
+  
+  return { records: filteredRecords, employee, warnings };
 }
 
-// Parse schedule file
-function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warnings: string[] } {
+// Parse schedule file (generic for any employee)
+function parseScheduleFile(file: ArrayBuffer, targetEmployee?: string): { records: ScheduleRecord[], warnings: string[] } {
   const workbook = XLSX.read(file, { type: 'array' });
   const worksheet = workbook.Sheets[workbook.SheetNames[0]];
   const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
@@ -241,6 +254,9 @@ function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warn
   
   console.log('Schedule file data preview:', data.slice(0, 10));
   console.log('Total rows in schedule file:', data.length);
+  if (targetEmployee) {
+    console.log('Target employee for schedule filtering:', targetEmployee);
+  }
   
   // Find header row with dates - be more flexible
   let headerRowIdx = -1;
@@ -301,6 +317,30 @@ function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warn
   for (let i = headerRowIdx + 1; i < data.length; i++) {
     const row = data[i] as any[];
     
+    // Check if this row contains the target employee name (if filtering)
+    let isEmployeeRow = true;
+    if (targetEmployee) {
+      const rowText = row.join(' ').toUpperCase();
+      const cleanTarget = targetEmployee.toUpperCase();
+      isEmployeeRow = rowText.includes(cleanTarget) || 
+                     cleanTarget.split(',').some(part => rowText.includes(part.trim())) ||
+                     cleanTarget.split(' ').some(part => part.length > 2 && rowText.includes(part.trim()));
+      
+      if (!isEmployeeRow) {
+        // Also check if this is a generic shift row (AM/PM) without employee names
+        const hasShiftType = row.some(cell => {
+          const cellStr = String(cell).trim().toUpperCase();
+          return cellStr.includes('AM') || cellStr.includes('PM');
+        });
+        isEmployeeRow = hasShiftType; // Include generic shift rows
+      }
+    }
+    
+    if (!isEmployeeRow) {
+      console.log(`Row ${i} - skipped (not for target employee)`);
+      continue;
+    }
+    
     // Look for AM/PM indicators in any of the first few columns
     let shiftType: 'AM' | 'PM' | null = null;
     let rowText = '';
@@ -332,7 +372,9 @@ function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warn
       continue;
     }
     
-    console.log(`Row ${i} - detected ${shiftType} shift`);
+    console.log(`Row ${i} - detected ${shiftType} shift${targetEmployee ? ' for target employee' : ''}`);
+    
+    // Rest of the shift processing logic...
     
     // Default shift times
     const shiftDefaults = {
@@ -575,21 +617,32 @@ function calculateAttendance(punchRecords: PunchRecord[], scheduleRecords: Sched
   return { dayRecords, summary, warnings };
 }
 
-// Main processing function
+// Main processing function (works for any employee)
 export async function processAttendanceFiles(punchFile: File, scheduleFile: File): Promise<AttendanceResult> {
   try {
+    console.log('\n=== PROCESSING FILES FOR ANY EMPLOYEE ===');
+    console.log('Punch file:', punchFile.name);
+    console.log('Schedule file:', scheduleFile.name);
+    
     // Read files as ArrayBuffer
     const punchBuffer = await punchFile.arrayBuffer();
     const scheduleBuffer = await scheduleFile.arrayBuffer();
     
     // Parse files
     const { records: punchRecords, employee, warnings: punchWarnings } = parsePunchFile(punchBuffer);
-    const { records: scheduleRecords, warnings: schedWarnings } = parseScheduleFile(scheduleBuffer);
+    console.log(`Processing attendance for: ${employee}`);
     
-    // Calculate attendance
+    // Parse schedule file with employee filtering for multi-employee schedules
+    const { records: scheduleRecords, warnings: schedWarnings } = parseScheduleFile(scheduleBuffer, employee);
+    
+    // Calculate attendance for this specific employee
     const { dayRecords, summary, warnings: calcWarnings } = calculateAttendance(punchRecords, scheduleRecords);
     
     const allWarnings = [...punchWarnings, ...schedWarnings, ...calcWarnings];
+    
+    console.log(`\n=== FINAL RESULTS FOR ${employee} ===`);
+    console.log('Day records:', dayRecords.length);
+    console.log('Summary:', summary);
     
     return {
       employee_name: employee,

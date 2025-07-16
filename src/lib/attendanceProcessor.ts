@@ -155,8 +155,10 @@ function parsePunchFile(file: ArrayBuffer): { records: PunchRecord[], employee: 
     // Look for Daily Hours Report header
     const dateMatch = rowText.match(/Daily Hours Report For:\s*(\d{1,2}\/\d{1,2}\/\d{4})/);
     if (dateMatch) {
+      console.log('🔍 PUNCH FILE: Found "Daily Hours Report For:" with date:', dateMatch[1]);
       const [month, day, year] = dateMatch[1].split('/').map(Number);
       currentDate = new Date(year, month - 1, day);
+      console.log('🔍 PUNCH FILE: Parsed date as:', currentDate.toDateString(), '(', currentDate.toISOString().split('T')[0], ')');
       continue;
     }
     

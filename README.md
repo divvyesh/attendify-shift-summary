@@ -1,73 +1,177 @@
-# Welcome to your Lovable project
+# Attendance Summariser
 
-## Project info
+A comprehensive internal web application for processing employee attendance data from Excel files.
 
-**URL**: https://lovable.dev/projects/df711a33-9754-4700-a31d-525c9c8bbe1a
+## Overview
 
-## How can I edit this code?
+The Attendance Summariser automatically processes two types of Excel files per employee:
+1. **Punch Clock Data** - Daily Hours Report exports with IN1, OUT1, IN2, OUT2 timestamps
+2. **Scheduled Shifts** - Month grid exports with AM/PM shift schedules
 
-There are several ways of editing your application.
+The application automatically detects employee names, parses schedules, aligns day-level records, and computes detailed attendance metrics including tardiness and early dismissal tracking.
 
-**Use Lovable**
+## Features
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/df711a33-9754-4700-a31d-525c9c8bbe1a) and start prompting.
+### 📊 Comprehensive Analysis
+- **Attendance Percentages** - Both shift-based and hour-based calculations
+- **Tardiness Tracking** - Configurable threshold for late arrivals
+- **Early Dismissal Detection** - Configurable threshold for early departures
+- **Day-Level Details** - Complete breakdown of each scheduled shift
 
-Changes made via Lovable will be committed automatically to this repo.
+### 🎯 Smart Processing
+- **Automatic Employee Detection** - Extracts employee names from punch data
+- **Cross-Midnight Shift Support** - Handles overnight shifts correctly
+- **Lunch Break Calculation** - Accounts for OUT1/IN2 lunch punches
+- **Worked Hours Clipping** - Limits worked hours to scheduled maximums
 
-**Use your preferred IDE**
+### ⚙️ Configurable Policies
+- **Flexible Shift Times** - Customize AM/PM start and end times
+- **Adjustable Thresholds** - Configure tardiness and early dismissal limits
+- **Timezone Support** - Multiple timezone options for accurate calculations
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 📱 Modern Interface
+- **Drag & Drop Upload** - Easy file upload with progress tracking
+- **Interactive Tables** - Filter and search day-level records
+- **Summary Cards** - Key metrics at a glance
+- **CSV Export** - Download detailed analysis results
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Technology Stack
 
-Follow these steps:
+### Backend
+- **FastAPI** - High-performance Python web framework
+- **Pandas** - Data processing and analysis
+- **OpenPyXL** - Excel file parsing
+- **Pydantic** - Data validation and serialization
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Frontend
+- **React 18** - Modern UI framework
+- **TypeScript** - Type safety and development experience
+- **Tailwind CSS** - Utility-first styling
+- **Shadcn/UI** - Beautiful, accessible components
+- **React Dropzone** - File upload handling
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## Quick Start
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.11+
+- pip package manager
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Backend Setup
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend Setup
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The application will be available at:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## File Format Requirements
 
-**Use GitHub Codespaces**
+### Punch Clock File
+- Must contain repeated "Daily Hours Report For: mm/dd/yyyy" blocks
+- Header row with columns: "Employee Name", "IN 1", "OUT 1", "IN 2", "OUT 2", "Total"
+- Data rows with employee names like "LAST, FIRST" and time stamps
+- Supports various time formats: "3:56PM", "12:17AM", "16:00:00"
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Schedule File
+- Month grid format with date headers like "Thu\n5/1/25"
+- AM/PM shift indicators in column 3 (0-based index)
+- Blank cells indicate no shift scheduled
+- Optional time overrides in format "16:00:00"
 
-## What technologies are used for this project?
+## Usage
 
-This project is built with:
+1. **Upload Files** - Drag and drop or select your punch clock and schedule Excel files
+2. **Configure Settings** - Adjust shift times, thresholds, and timezone as needed
+3. **Process Data** - Click "Process Attendance Files" to analyze the data
+4. **Review Results** - View summary metrics and detailed day-level records
+5. **Export Data** - Download complete analysis as CSV file
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## API Endpoints
 
-## How can I deploy this project?
+- `POST /attendance/compute` - Process attendance files and return analysis
+- `GET /attendance/{job_id}/csv` - Download analysis results as CSV
+- `GET /health` - Health check endpoint
+- `GET /` - API information and documentation
 
-Simply open [Lovable](https://lovable.dev/projects/df711a33-9754-4700-a31d-525c9c8bbe1a) and click on Share -> Publish.
+## Configuration Options
 
-## Can I connect a custom domain to my Lovable project?
+### Shift Policies
+- **AM Shift** - Default: 09:45 - 16:30 (same day)
+- **PM Shift** - Default: 16:00 - 00:15 (crosses midnight)
+- **Cross-Midnight Support** - Automatic handling for overnight shifts
 
-Yes, you can!
+### Attendance Thresholds
+- **Tardiness** - Default: 5 minutes after scheduled start
+- **Early Dismissal** - Default: 15 minutes before scheduled end
+- **Timezone** - Configurable for accurate time calculations
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Data Processing Logic
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Attendance Calculation
+1. Parse punch clock file to extract daily time records
+2. Parse schedule file to determine planned shifts
+3. Match punch records to scheduled shifts by date
+4. Calculate worked minutes excluding lunch breaks
+5. Apply tardiness and early dismissal rules
+6. Compute attendance percentages and summary statistics
+
+### Key Metrics
+- **Scheduled vs Worked Shifts** - Count and percentage
+- **Scheduled vs Worked Hours** - Total hours and percentage
+- **Tardiness Count** - Late arrivals exceeding threshold
+- **Early Dismissal Count** - Early departures exceeding threshold
+
+## Development
+
+### Project Structure
+```
+attendance-summariser/
+├── backend/
+│   ├── app.py                 # FastAPI application
+│   ├── models.py              # Pydantic data models
+│   ├── config.py              # Application configuration
+│   ├── attendance_core/       # Core processing logic
+│   │   ├── parse_punch.py     # Punch clock file parser
+│   │   ├── parse_schedule.py  # Schedule file parser
+│   │   ├── compute.py         # Attendance calculations
+│   │   └── utils.py           # Utility functions
+│   ├── tests/                 # Unit tests
+│   └── sample_data/           # Sample Excel files
+└── src/
+    ├── components/            # React components
+    ├── pages/                 # Application pages
+    └── lib/                   # Utilities and configuration
+```
+
+### Testing
+```bash
+# Backend tests
+cd backend
+pytest
+
+# Frontend tests
+npm test
+```
+
+## Deployment
+
+The application can be deployed using Docker, cloud platforms, or traditional server hosting. See deployment documentation for specific instructions.
+
+## Support
+
+For questions, issues, or feature requests, please refer to the project documentation or contact the development team.
+
+---
+
+Built with ❤️ for efficient attendance management.

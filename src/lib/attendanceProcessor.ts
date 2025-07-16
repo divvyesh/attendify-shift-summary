@@ -239,48 +239,100 @@ function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warn
   const records: ScheduleRecord[] = [];
   const warnings: string[] = [];
   
-  // Find header row with dates
+  console.log('Schedule file data preview:', data.slice(0, 10));
+  console.log('Total rows in schedule file:', data.length);
+  
+  // Find header row with dates - be more flexible
   let headerRowIdx = -1;
   const dateColumns: { [col: number]: Date } = {};
   
-  for (let i = 0; i < data.length; i++) {
+  for (let i = 0; i < Math.min(data.length, 20); i++) { // Check first 20 rows
     const row = data[i] as any[];
     let dateCount = 0;
     const tempDateCols: { [col: number]: Date } = {};
     
+    console.log(`Row ${i}:`, row);
+    
     row.forEach((cell, colIdx) => {
       const cellStr = String(cell).trim();
-      const parsedDate = parseHeaderDate(cellStr);
-      if (parsedDate) {
-        tempDateCols[colIdx] = parsedDate;
-        dateCount++;
+      
+      // Try multiple date detection patterns
+      if (cellStr) {
+        let parsedDate = parseHeaderDate(cellStr);
+        
+        // Also try direct date parsing for common formats
+        if (!parsedDate) {
+          // Try parsing Excel date numbers
+          if (typeof cell === 'number' && cell > 40000 && cell < 50000) {
+            parsedDate = new Date((cell - 25569) * 86400 * 1000);
+          }
+          
+          // Try other common date formats
+          if (!parsedDate && cellStr.match(/\d+\/\d+/)) {
+            parsedDate = parseHeaderDate(cellStr);
+          }
+        }
+        
+        if (parsedDate) {
+          tempDateCols[colIdx] = parsedDate;
+          dateCount++;
+          console.log(`Found date in row ${i}, col ${colIdx}:`, cellStr, '→', parsedDate);
+        }
       }
     });
     
-    if (dateCount >= 3) {
+    // If we found multiple dates in this row, it's likely the header
+    if (dateCount >= 2) { // Lower threshold
       headerRowIdx = i;
       Object.assign(dateColumns, tempDateCols);
+      console.log(`Using row ${i} as header with ${dateCount} dates`);
       break;
     }
   }
   
   if (headerRowIdx === -1) {
-    throw new Error('Schedule date header row not detected');
+    console.error('Could not find date header row. Checked rows:', data.slice(0, 20));
+    throw new Error('Schedule date header row not detected. Please ensure your schedule file has a row with multiple dates.');
   }
   
-  // Parse shift rows
+  console.log('Found date columns:', dateColumns);
+  
+  // Parse shift rows - be more flexible with shift detection
   for (let i = headerRowIdx + 1; i < data.length; i++) {
     const row = data[i] as any[];
     
-    // Look for AM/PM in column 3 (0-based index 3)
+    // Look for AM/PM indicators in any of the first few columns
     let shiftType: 'AM' | 'PM' | null = null;
-    if (row.length > 3) {
-      const cellStr = String(row[3]).trim().toUpperCase();
-      if (cellStr.includes('AM')) shiftType = 'AM';
-      else if (cellStr.includes('PM')) shiftType = 'PM';
+    let rowText = '';
+    
+    // Check first 5 columns for shift indicators
+    for (let colIdx = 0; colIdx < Math.min(row.length, 5); colIdx++) {
+      if (row[colIdx]) {
+        const cellStr = String(row[colIdx]).trim().toUpperCase();
+        rowText += cellStr + ' ';
+        
+        if (cellStr.includes('AM') || cellStr === 'AM') {
+          shiftType = 'AM';
+          break;
+        } else if (cellStr.includes('PM') || cellStr === 'PM') {
+          shiftType = 'PM';
+          break;
+        }
+      }
     }
     
-    if (!shiftType) continue;
+    if (!shiftType) {
+      // Try to detect from the entire row text
+      if (rowText.includes('AM')) shiftType = 'AM';
+      else if (rowText.includes('PM')) shiftType = 'PM';
+    }
+    
+    if (!shiftType) {
+      console.log(`Row ${i} - no shift type found in:`, rowText);
+      continue;
+    }
+    
+    console.log(`Row ${i} - detected ${shiftType} shift`);
     
     // Default shift times
     const shiftDefaults = {
@@ -301,13 +353,27 @@ function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warn
         const cell = row[colIdx];
         const cellStr = String(cell).trim();
         
-        if (cellStr && cellStr !== '0') {
+        // Consider a cell as indicating a scheduled shift if:
+        // 1. It's not empty/null/undefined
+        // 2. It's not just "0" or similar null values
+        // 3. It contains any meaningful content
+        const hasShift = cell && 
+                        cellStr !== '' && 
+                        cellStr !== '0' && 
+                        cellStr !== 'null' && 
+                        cellStr !== 'undefined' &&
+                        cellStr.toLowerCase() !== 'off';
+        
+        if (hasShift) {
+          console.log(`Found shift: ${shiftType} on ${scheduleDate.toDateString()}, cell value: "${cellStr}"`);
+          
           // Check for explicit time in cell
           let actualStartTime = parseTimeString(cellStr);
           
           let startTime: Date;
           if (actualStartTime) {
             startTime = actualStartTime;
+            console.log(`Using explicit start time: ${actualStartTime.toTimeString()}`);
           } else {
             startTime = new Date();
             startTime.setHours(startHour, startMin, 0, 0);
@@ -340,8 +406,21 @@ function parseScheduleFile(file: ArrayBuffer): { records: ScheduleRecord[], warn
     });
   }
   
+  console.log(`Parsed ${records.length} schedule records`);
+  
   if (records.length === 0) {
-    throw new Error('No schedule records found in file');
+    warnings.push('No schedule records found. Please check that your schedule file contains:');
+    warnings.push('1. A header row with dates (like "Thu\n5/1/25" or "5/1/25")');
+    warnings.push('2. Rows with "AM" or "PM" in the first few columns');
+    warnings.push('3. Non-empty cells under date columns for scheduled shifts');
+    
+    throw new Error(`No schedule records found in file. Common issues:
+    
+1. Date header row not detected - ensure dates are in format like "5/1/25" or "Thu\n5/1/25"
+2. AM/PM shift rows not found - ensure "AM" or "PM" appears in the first few columns
+3. No scheduled shifts found - ensure non-empty cells under date columns
+
+Please check your file format and try again.`);
   }
   
   return { records, warnings };

@@ -110,11 +110,24 @@ def parse_punch_clock(file_path: Union[str, Path], timezone_str: str = "America/
                         except (ValueError, TypeError):
                             pass
                 
-                # Convert times to datetimes (will be adjusted later with shift context)
+                # Convert times to datetimes (same day initially)
                 in1_dt = combine_date_time(current_date, in1_time, timezone_str) if in1_time else None
                 out1_dt = combine_date_time(current_date, out1_time, timezone_str) if out1_time else None
                 in2_dt = combine_date_time(current_date, in2_time, timezone_str) if in2_time else None
                 out2_dt = combine_date_time(current_date, out2_time, timezone_str) if out2_time else None
+                
+                # Handle potential cross-midnight for out times (OUT2 typically)
+                # If OUT2 time is earlier than IN1 time, it likely means next day
+                if out2_dt and in1_dt and out2_dt.time() < in1_dt.time():
+                    # This suggests OUT2 is the next day (e.g., PM shift ending after midnight)
+                    out2_dt = out2_dt + timedelta(days=1)
+                    logger.debug(f"Adjusted OUT2 to next day for {current_date.date()}: {out2_dt}")
+                
+                # Similar logic for lunch punches if needed
+                if out1_dt and in1_dt and out1_dt < in1_dt:
+                    out1_dt = out1_dt + timedelta(days=1)
+                if in2_dt and in1_dt and in2_dt < in1_dt:
+                    in2_dt = in2_dt + timedelta(days=1)
                 
                 punch_records.append({
                     'date': current_date.date(),

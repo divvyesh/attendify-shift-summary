@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
-from models import DayRecord, Summary, PolicyConfig
+from ..models import DayRecord, Summary, PolicyConfig
 from .utils import clamp
 import logging
 
@@ -67,22 +67,36 @@ def build_attendance(
             present = actual_in is not None
             
             if present and actual_out is not None:
-                # Handle cross-midnight schedules
+                # Handle cross-midnight schedules for PM shifts
                 cross_midnight = sched_end_dt.date() > sched_start_dt.date()
                 
-                if cross_midnight and actual_out < actual_in:
+                # For cross-midnight PM shifts, if actual_out is before actual_in (same day),
+                # it means the out punch was the next day
+                if cross_midnight and actual_out.time() < actual_in.time():
                     # Adjust actual_out to next day
-                    actual_out = actual_out + timedelta(days=1)
-                    logger.debug(f"Adjusted cross-midnight actual_out for {shift_date}")
+                    actual_out = actual_out.replace(
+                        year=actual_out.year,
+                        month=actual_out.month, 
+                        day=actual_out.day
+                    ) + timedelta(days=1)
+                    logger.debug(f"Adjusted cross-midnight actual_out for {shift_date}: {actual_out}")
                 
-                # Calculate lunch minutes
+                # Also handle cross-midnight for lunch times if needed
+                if cross_midnight and actual_out1 and actual_in2:
+                    if actual_in2.time() < actual_out1.time():
+                        actual_in2 = actual_in2 + timedelta(days=1)
+                
+                # Calculate lunch minutes (time between out1 and in2)
                 lunch_minutes = 0.0
-                if actual_out1 and actual_in2 and actual_in2 > actual_out1:
-                    lunch_minutes = (actual_in2 - actual_out1).total_seconds() / 60
+                if actual_out1 and actual_in2:
+                    lunch_duration = actual_in2 - actual_out1
+                    if lunch_duration.total_seconds() > 0:
+                        lunch_minutes = lunch_duration.total_seconds() / 60
                     lunch_minutes = max(0.0, lunch_minutes)
                 
-                # Calculate total worked minutes
-                total_minutes = (actual_out - actual_in).total_seconds() / 60
+                # Calculate total worked minutes (total time minus lunch)
+                total_duration = actual_out - actual_in
+                total_minutes = total_duration.total_seconds() / 60
                 worked_minutes = max(0.0, total_minutes - lunch_minutes)
                 
                 logger.debug(f"Date {shift_date}: total={total_minutes:.1f}min, lunch={lunch_minutes:.1f}min, worked={worked_minutes:.1f}min")

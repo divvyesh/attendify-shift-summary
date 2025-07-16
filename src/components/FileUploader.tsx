@@ -182,9 +182,12 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
         onDataProcessed(mockData);
         
         toast({
-          title: "Demo mode active!",
-          description: `Sample analysis shown for demonstration (backend not connected)`,
+          title: "⚠️ Demo Mode Active",
+          description: "Backend server not running. Start with: cd backend && uvicorn app:app --reload --port 8000",
+          variant: "destructive",
         });
+        
+        setError("Backend not running - showing sample data only. To process real files, start the Python server: cd backend && uvicorn app:app --reload --port 8000");
         
         return;
       }
@@ -344,17 +347,22 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
         </div>
       </div>
 
-      {/* Demo Mode Notice */}
-      <div className="bg-muted/50 p-4 rounded-lg">
+      {/* Backend Required Notice */}
+      <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
         <div className="flex items-start gap-3">
-          <div className="p-1 bg-primary/10 rounded">
-            <AlertCircle className="h-4 w-4 text-primary" />
+          <div className="p-1 bg-destructive/10 rounded">
+            <AlertCircle className="h-4 w-4 text-destructive" />
           </div>
           <div className="text-sm">
-            <p className="font-medium text-foreground">Demo Mode Available</p>
-            <p className="text-muted-foreground">
-              You can test the interface by uploading any Excel files. If the backend isn't running, 
-              the app will show sample attendance data for demonstration purposes.
+            <p className="font-medium text-destructive">Backend Server Required for Real Processing</p>
+            <p className="text-muted-foreground mt-1">
+              To process your actual files and get accurate attendance data, start the Python backend:
+            </p>
+            <code className="block mt-2 p-2 bg-muted rounded text-xs font-mono">
+              cd backend && uvicorn app:app --reload --port 8000
+            </code>
+            <p className="text-muted-foreground mt-2">
+              Without the backend, uploading files will only show demo data for UI testing.
             </p>
           </div>
         </div>

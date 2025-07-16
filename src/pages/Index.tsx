@@ -4,8 +4,9 @@ import { SummaryCards } from '@/components/SummaryCards';
 import { DayTable } from '@/components/DayTable';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileSpreadsheet, Calculator } from 'lucide-react';
+import { FileSpreadsheet, Calculator, Upload } from 'lucide-react';
 
 interface AttendanceData {
   employee_name: string;
@@ -104,12 +105,24 @@ const Index = () => {
             {/* Employee Header */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-xl">
-                  Attendance Analysis: {attendanceData.employee_name || 'Unknown Employee'}
-                </CardTitle>
-                <CardDescription>
-                  Analysis period covers {attendanceData.day_level.length} scheduled shifts
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl">
+                      Attendance Analysis: {attendanceData.employee_name || 'Unknown Employee'}
+                    </CardTitle>
+                    <CardDescription>
+                      Analysis period covers {attendanceData.day_level.length} scheduled shifts
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setAttendanceData(null)}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload New Files
+                  </Button>
+                </div>
               </CardHeader>
             </Card>
 

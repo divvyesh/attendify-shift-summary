@@ -21,36 +21,12 @@ interface UploadedFile {
 
 export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileUploaderProps) => {
   const [attendanceFile, setAttendanceFile] = useState<UploadedFile | null>(null);
-  const [punchFile, setPunchFile] = useState<UploadedFile | null>(null);
-  const [scheduleFile, setScheduleFile] = useState<UploadedFile | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { setRecords } = useAttendanceStore();
   
   const fileRef = useRef<HTMLInputElement>(null);
-  const punchFileRef = useRef<HTMLInputElement>(null);
-  const scheduleFileRef = useRef<HTMLInputElement>(null);
-
-  const handlePunchFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (validateFile(file)) {
-        setPunchFile({ file, status: 'ready' });
-        setError(null);
-      }
-    }
-  };
-
-  const handleScheduleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (validateFile(file)) {
-        setScheduleFile({ file, status: 'ready' });
-        setError(null);
-      }
-    }
-  };
 
   const validateFile = (file: File): boolean => {
     const validExtensions = ['.xlsx', '.xls', '.csv'];
@@ -78,8 +54,8 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
   };
 
   const handleSubmit = async () => {
-    if (!punchFile && !scheduleFile) {
-      setError('Please upload at least one attendance file');
+    if (!attendanceFile) {
+      setError('Please upload an attendance file');
       return;
     }
 
@@ -90,13 +66,7 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
     try {
       setProgress(30);
       
-      // Use punch file as primary, fall back to schedule file
-      const fileToProcess = punchFile?.file || scheduleFile?.file;
-      if (!fileToProcess) {
-        throw new Error('No file selected for processing');
-      }
-      
-      const result = await processCSVFile(fileToProcess);
+      const result = await processCSVFile(attendanceFile.file);
       
       setProgress(70);
       
@@ -108,7 +78,7 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
       setProgress(100);
       
       toast({
-        title: "Files processed successfully!",
+        title: "File processed successfully!",
         description: `${result.records.length} attendance records processed${result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : ''}`,
       });
       
@@ -135,139 +105,82 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <h3 className="font-medium mb-2">Punch Clock Data</h3>
-          <Card className="h-32">
-            <CardContent className="p-0 h-full">
-              <div
-                onClick={() => punchFileRef.current?.click()}
-                className={`
-                  h-full p-6 border-2 border-dashed rounded-lg cursor-pointer
-                  transition-colors duration-200 flex flex-col items-center justify-center gap-2
-                  ${punchFile ? 'border-success bg-success/5' : 'border-border hover:border-primary hover:bg-primary/5'}
-                  ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-              >
-                <input
-                  ref={punchFileRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handlePunchFileChange}
-                  disabled={isLoading}
-                  className="hidden"
-                />
-                
-                {punchFile ? (
-                  <>
-                    <CheckCircle className="h-6 w-6 text-success" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-success">{punchFile.file.name}</p>
-                      <p className="text-xs text-muted-foreground">Ready to process</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPunchFile(null);
-                        if (punchFileRef.current) punchFileRef.current.value = '';
-                      }}
-                      className="mt-1"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <FileSpreadsheet className="h-6 w-6 text-muted-foreground" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium">Upload punch clock file</p>
-                      <p className="text-xs text-muted-foreground">Excel file with Daily Hours Reports</p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        
-        <div>
-          <h3 className="font-medium mb-2">Schedule Data</h3>
-          <Card className="h-32">
-            <CardContent className="p-0 h-full">
-              <div
-                onClick={() => scheduleFileRef.current?.click()}
-                className={`
-                  h-full p-6 border-2 border-dashed rounded-lg cursor-pointer
-                  transition-colors duration-200 flex flex-col items-center justify-center gap-2
-                  ${scheduleFile ? 'border-success bg-success/5' : 'border-border hover:border-primary hover:bg-primary/5'}
-                  ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-              >
-                <input
-                  ref={scheduleFileRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleScheduleFileChange}
-                  disabled={isLoading}
-                  className="hidden"
-                />
-                
-                {scheduleFile ? (
-                  <>
-                    <CheckCircle className="h-6 w-6 text-success" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-success">{scheduleFile.file.name}</p>
-                      <p className="text-xs text-muted-foreground">Ready to process</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setScheduleFile(null);
-                        if (scheduleFileRef.current) scheduleFileRef.current.value = '';
-                      }}
-                      className="mt-1"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <FileSpreadsheet className="h-6 w-6 text-muted-foreground" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium">Upload schedule file</p>
-                      <p className="text-xs text-muted-foreground">Excel file with month grid schedule</p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Single File Upload */}
+      <div>
+        <h3 className="font-medium mb-2">Attendance Data File</h3>
+        <Card className="h-40">
+          <CardContent className="p-0 h-full">
+            <div
+              onClick={() => fileRef.current?.click()}
+              className={`
+                h-full p-6 border-2 border-dashed rounded-lg cursor-pointer
+                transition-colors duration-200 flex flex-col items-center justify-center gap-2
+                ${attendanceFile ? 'border-success bg-success/5' : 'border-border hover:border-primary hover:bg-primary/5'}
+                ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
+              `}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileChange}
+                disabled={isLoading}
+                className="hidden"
+              />
+              
+              {attendanceFile ? (
+                <>
+                  <CheckCircle className="h-8 w-8 text-success" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-success">{attendanceFile.file.name}</p>
+                    <p className="text-xs text-muted-foreground">Ready to process</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(attendanceFile.file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAttendanceFile(null);
+                      if (fileRef.current) fileRef.current.value = '';
+                    }}
+                    className="mt-1"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium">Upload Attendance File</p>
+                    <p className="text-xs text-muted-foreground">Excel (.xlsx, .xls) or CSV file</p>
+                    <p className="text-xs text-muted-foreground mt-1">Max 50MB</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Client-Side Processing Notice */}
+      {/* Processing Notice */}
       <div className="bg-success/10 border border-success/20 p-4 rounded-lg">
         <div className="flex items-start gap-3">
           <div className="p-1 bg-success/10 rounded">
             <CheckCircle className="h-4 w-4 text-success" />
           </div>
           <div className="text-sm">
-            <p className="font-medium text-success">Ready to Process Your Real Files</p>
+            <p className="font-medium text-success">Client-Side Processing</p>
             <p className="text-muted-foreground mt-1">
-              This app processes your Excel files directly in the browser - no server needed! 
-              Upload your punch clock and schedule files to get accurate attendance analysis:
+              Your file is processed securely in your browser - no data is sent to external servers.
             </p>
-            <ul className="mt-2 text-xs text-muted-foreground space-y-1">
-              <li>• Morning shift: 9:45a - 4:30p</li>
-              <li>• Evening shift: 4:00p - 12:15a (cross-midnight)</li>
-              <li>• Tardy: {'>'}5min late | Early dismissal: {'>'}15min early</li>
-            </ul>
+            <p className="text-xs text-muted-foreground mt-2">
+              Expected columns: employee_name, employee_id, store, date, shift, scheduled_in, scheduled_out, actual_in, actual_out, status
+            </p>
           </div>
         </div>
       </div>
@@ -283,7 +196,7 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Processing your files...</span>
+            <span className="text-sm">Processing your file...</span>
           </div>
           <Progress value={progress} className="w-full" />
         </div>
@@ -291,19 +204,19 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
 
       <Button 
         onClick={handleSubmit}
-        disabled={(!punchFile && !scheduleFile) || isLoading}
+        disabled={!attendanceFile || isLoading}
         className="w-full"
         size="lg"
       >
         {isLoading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Processing Your Files...
+            Processing File...
           </>
         ) : (
           <>
             <Upload className="mr-2 h-4 w-4" />
-            Process Attendance Files
+            Process Attendance File
           </>
         )}
       </Button>

@@ -11,8 +11,12 @@ export interface ProcessedData {
 }
 
 export async function processExcelFile(file: File): Promise<ProcessedData> {
+  console.log('📂 Processing Excel file:', file.name);
+  
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'buffer' });
+  
+  console.log('📊 Available sheets:', workbook.SheetNames);
   
   // Use first sheet
   const sheetName = workbook.SheetNames[0];
@@ -29,12 +33,15 @@ export async function processExcelFile(file: File): Promise<ProcessedData> {
     throw new Error('Excel file appears to be empty');
   }
   
+  console.log('📋 Raw data rows found:', data.length);
+  
   // Find the header row (first row with meaningful data)
   let headerRowIndex = 0;
   for (let i = 0; i < Math.min(5, data.length); i++) {
     const row = data[i];
     if (row && row.length >= 3 && row.some(cell => cell && cell.toString().trim())) {
       headerRowIndex = i;
+      console.log(`📍 Header row detected at index ${i}`);
       break;
     }
   }
@@ -43,6 +50,11 @@ export async function processExcelFile(file: File): Promise<ProcessedData> {
   const rows = data.slice(headerRowIndex + 1).filter(row => 
     row && row.some(cell => cell && cell.toString().trim())
   );
+  
+  console.log('📋 Final processing result:');
+  console.log('  - Headers:', headers.slice(0, 6), headers.length > 6 ? '...' : '');
+  console.log('  - Data rows:', rows.length);
+  console.log('  - Columns:', headers.length);
   
   return {
     headers: headers.map(h => h ? h.toString().trim() : ''),

@@ -12,6 +12,8 @@ import { processExcelFile, processCSVFile, ProcessedData } from '@/lib/excelProc
 import { mergeAttendanceFiles } from '@/lib/attendanceMerger';
 import { normalizeData, NormalizedData } from '@/lib/dataNormalizer';
 import { AIAnalysisPanel } from './AIAnalysisPanel';
+import { DiagnosticPanel } from './DiagnosticPanel';
+import { MergedAttendanceData } from '@/lib/attendanceMerger';
 
 interface FileUploaderProps {
   onDataProcessed: (data: any) => void;
@@ -34,6 +36,7 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
   const [file2, setFile2] = useState<UploadedFile | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [failedResult, setFailedResult] = useState<MergedAttendanceData | null>(null);
   const { toast } = useToast();
   const { setRecords } = useAttendanceStore();
   
@@ -70,6 +73,7 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
     }
     
     setError(null);
+    setFailedResult(null); // Clear any previous failed results
 
     try {
       // Analyze the file
@@ -146,7 +150,18 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
       setProgress(70);
       
       if (result.records.length === 0) {
-        throw new Error('No valid attendance records found in files');
+        // Instead of throwing an error, store the result for diagnostics
+        setFailedResult(result);
+        setProgress(100);
+        
+        console.log('🔍 Zero records found - showing diagnostics:', result);
+        
+        toast({
+          title: "No records found",
+          description: "Check the diagnostic panel below for detailed analysis",
+          variant: "destructive",
+        });
+        return; // Exit without throwing error
       }
       
       setRecords(result.records);
@@ -303,11 +318,39 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
       setFile2(updatedFile);
     }
 
-    toast({
-      title: "AI analysis dismissed",
-      description: "Using original file analysis",
-    });
-  };
+  toast({
+    title: "AI analysis dismissed",
+    description: "Using original file analysis",
+  });
+};
+
+// Diagnostic Panel Handlers
+const handleDiagnosticAIAnalysis = async () => {
+  // Clear the failed result and trigger AI analysis for both files
+  setFailedResult(null);
+  
+  if (file1?.insights?.needsAIReview || (!file1?.aiAnalysis && file1)) {
+    await handleRunAIAnalysis(1);
+  }
+  if (file2?.insights?.needsAIReview || (!file2?.aiAnalysis && file2)) {
+    await handleRunAIAnalysis(2);
+  }
+};
+
+const handleTryAgain = () => {
+  // Clear all files and start over
+  setFailedResult(null);
+  setFile1(null);
+  setFile2(null);
+  setError(null);
+  if (file1Ref.current) file1Ref.current.value = '';
+  if (file2Ref.current) file2Ref.current.value = '';
+  
+  toast({
+    title: "Files cleared",
+    description: "Upload new files to try again",
+  });
+};
 
   const removeFile = (fileNumber: 1 | 2) => {
     if (fileNumber === 1) {
@@ -586,6 +629,15 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
           </>
         )}
       </Button>
+
+      {/* Diagnostic Panel - shown when no records found */}
+      {failedResult && (
+        <DiagnosticPanel
+          result={failedResult}
+          onRunAIAnalysis={handleDiagnosticAIAnalysis}
+          onTryAgain={handleTryAgain}
+        />
+      )}
     </div>
   );
 };

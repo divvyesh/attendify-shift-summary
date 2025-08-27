@@ -21,12 +21,16 @@ interface UploadedFile {
 
 export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileUploaderProps) => {
   const [attendanceFile, setAttendanceFile] = useState<UploadedFile | null>(null);
+  const [punchFile, setPunchFile] = useState<UploadedFile | null>(null);
+  const [scheduleFile, setScheduleFile] = useState<UploadedFile | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { setRecords } = useAttendanceStore();
   
   const fileRef = useRef<HTMLInputElement>(null);
+  const punchFileRef = useRef<HTMLInputElement>(null);
+  const scheduleFileRef = useRef<HTMLInputElement>(null);
 
   const handlePunchFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -74,8 +78,8 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
   };
 
   const handleSubmit = async () => {
-    if (!attendanceFile) {
-      setError('Please upload an attendance file');
+    if (!punchFile && !scheduleFile) {
+      setError('Please upload at least one attendance file');
       return;
     }
 
@@ -86,7 +90,13 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
     try {
       setProgress(30);
       
-      const result = await processCSVFile(attendanceFile.file);
+      // Use punch file as primary, fall back to schedule file
+      const fileToProcess = punchFile?.file || scheduleFile?.file;
+      if (!fileToProcess) {
+        throw new Error('No file selected for processing');
+      }
+      
+      const result = await processCSVFile(fileToProcess);
       
       setProgress(70);
       
@@ -281,7 +291,7 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
 
       <Button 
         onClick={handleSubmit}
-        disabled={!punchFile || !scheduleFile || isLoading}
+        disabled={(!punchFile && !scheduleFile) || isLoading}
         className="w-full"
         size="lg"
       >

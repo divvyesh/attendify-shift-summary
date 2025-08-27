@@ -14,7 +14,160 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attendance_records: {
+        Row: {
+          actual_in: string | null
+          actual_out: string | null
+          attendance_pct: number | null
+          created_at: string
+          date: string
+          employee_id: string
+          hours_worked: number | null
+          id: string
+          is_early_out: boolean | null
+          is_tardy: boolean | null
+          scheduled_hours: number | null
+          scheduled_in: string | null
+          scheduled_out: string | null
+          shift: string
+          status: string
+          updated_at: string
+          upload_session_id: string | null
+        }
+        Insert: {
+          actual_in?: string | null
+          actual_out?: string | null
+          attendance_pct?: number | null
+          created_at?: string
+          date: string
+          employee_id: string
+          hours_worked?: number | null
+          id?: string
+          is_early_out?: boolean | null
+          is_tardy?: boolean | null
+          scheduled_hours?: number | null
+          scheduled_in?: string | null
+          scheduled_out?: string | null
+          shift: string
+          status: string
+          updated_at?: string
+          upload_session_id?: string | null
+        }
+        Update: {
+          actual_in?: string | null
+          actual_out?: string | null
+          attendance_pct?: number | null
+          created_at?: string
+          date?: string
+          employee_id?: string
+          hours_worked?: number | null
+          id?: string
+          is_early_out?: boolean | null
+          is_tardy?: boolean | null
+          scheduled_hours?: number | null
+          scheduled_in?: string | null
+          scheduled_out?: string | null
+          shift?: string
+          status?: string
+          updated_at?: string
+          upload_session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          name: string
+          store_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          name: string
+          store_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          name?: string
+          store_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          created_at: string
+          id: string
+          location: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      upload_sessions: {
+        Row: {
+          file_names: string[]
+          id: string
+          processed_count: number | null
+          status: string | null
+          total_records: number | null
+          uploaded_at: string
+        }
+        Insert: {
+          file_names: string[]
+          id?: string
+          processed_count?: number | null
+          status?: string | null
+          total_records?: number | null
+          uploaded_at?: string
+        }
+        Update: {
+          file_names?: string[]
+          id?: string
+          processed_count?: number | null
+          status?: string | null
+          total_records?: number | null
+          uploaded_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -1,141 +1,81 @@
-import { useState } from 'react';
-import { FileUploader } from '@/components/FileUploader';
-import { SummaryCards } from '@/components/SummaryCards';
-import { DayTable } from '@/components/DayTable';
-import { ConfigPanel } from '@/components/ConfigPanel';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileSpreadsheet, Calculator, Upload } from 'lucide-react';
-
-interface AttendanceData {
-  employee_name: string;
-  summary: {
-    scheduled_shifts: number;
-    shifts_worked: number;
-    attendance_pct_shifts: number;
-    scheduled_hours: number;
-    worked_hours: number;
-    attendance_pct_hours: number;
-    tardy_count: number;
-    early_dismissal_count: number;
-  };
-  day_level: Array<{
-    date: string;
-    shift_type: string;
-    sched_start_dt: string;
-    sched_end_dt: string;
-    actual_in: string | null;
-    actual_out: string | null;
-    actual_out1: string | null;
-    actual_in2: string | null;
-    sched_minutes: number;
-    worked_minutes: number;
-    worked_minutes_clipped: number;
-    attendance_fraction: number;
-    present: boolean;
-    tardy: boolean;
-    early_dismissal: boolean;
-  }>;
-  config_used: any;
-}
+import { FileUploader } from '@/components/FileUploader';
+import { SampleDataToggle } from '@/components/SampleDataToggle';
+import { Upload, BarChart3, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAttendanceStore } from '@/store/attendanceStore';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
-  const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { records, clearData } = useAttendanceStore();
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleDataProcessed = (data: AttendanceData) => {
-    setAttendanceData(data);
+  // Redirect to team dashboard if data exists
+  useEffect(() => {
+    if (records.length > 0) {
+      navigate('/team');
+    }
+  }, [records.length, navigate]);
+
+  const handleDataProcessed = (data: any) => {
+    toast({
+      title: "Files processed successfully!",
+      description: "Redirecting to team dashboard...",
+    });
+    // Navigation will happen via useEffect when records update
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Calculator className="h-6 w-6 text-primary" />
+      <div className="container mx-auto py-8 px-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center space-y-4">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <BarChart3 className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Attendance Summariser</h1>
-              <p className="text-muted-foreground">Process employee attendance data from Excel files</p>
+              <h1 className="text-4xl font-bold tracking-tight">Attendance Summariser</h1>
+              <p className="text-lg text-muted-foreground mt-2">
+                Upload Excel/CSV timesheets and see team-level metrics per budtender
+              </p>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-8">
-        {!attendanceData ? (
-          <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* File Upload */}
             <Card>
-              <CardHeader className="text-center">
-                <CardTitle className="flex items-center justify-center gap-2">
-                  <FileSpreadsheet className="h-5 w-5" />
-                  Upload Attendance Files
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Upload New Files
                 </CardTitle>
                 <CardDescription>
-                  Upload your punch clock data and schedule files to generate detailed attendance analysis
+                  Upload Excel (.xlsx) or CSV files with attendance data to analyze your team's performance
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="upload" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="upload">File Upload</TabsTrigger>
-                    <TabsTrigger value="config">Configuration</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="upload" className="mt-6">
-                    <FileUploader 
-                      onDataProcessed={handleDataProcessed}
-                      isLoading={isLoading}
-                      setIsLoading={setIsLoading}
-                    />
-                  </TabsContent>
-                  
-                  <TabsContent value="config" className="mt-6">
-                    <ConfigPanel />
-                  </TabsContent>
-                </Tabs>
+                <Alert className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Expected format:</strong> employee_name, employee_id, store, date, shift, scheduled_in, scheduled_out, actual_in, actual_out, status
+                  </AlertDescription>
+                </Alert>
+                <FileUploader 
+                  onDataProcessed={handleDataProcessed}
+                  isLoading={isLoading}
+                  setIsLoading={setIsLoading}
+                />
               </CardContent>
             </Card>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Employee Header */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl">
-                      Attendance Analysis: {attendanceData.employee_name || 'Unknown Employee'}
-                    </CardTitle>
-                    <CardDescription>
-                      Analysis period covers {attendanceData.day_level.length} scheduled shifts
-                    </CardDescription>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setAttendanceData(null)}
-                    className="flex items-center gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload New Files
-                  </Button>
-                </div>
-              </CardHeader>
-            </Card>
 
-            {/* Summary Cards */}
-            <SummaryCards summary={attendanceData.summary} />
-
-            {/* Day Level Table */}
-            <DayTable 
-              dayRecords={attendanceData.day_level}
-              employeeName={attendanceData.employee_name}
-            />
+            {/* Sample Data */}
+            <SampleDataToggle />
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

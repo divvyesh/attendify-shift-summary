@@ -5,7 +5,8 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { processAttendanceFiles } from '@/lib/attendanceProcessor';
+import { processCSVFile } from '@/lib/csvProcessor';
+import { useAttendanceStore } from '@/store/attendanceStore';
 
 interface FileUploaderProps {
   onDataProcessed: (data: any) => void;
@@ -19,14 +20,13 @@ interface UploadedFile {
 }
 
 export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileUploaderProps) => {
-  const [punchFile, setPunchFile] = useState<UploadedFile | null>(null);
-  const [scheduleFile, setScheduleFile] = useState<UploadedFile | null>(null);
+  const [attendanceFile, setAttendanceFile] = useState<UploadedFile | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { setRecords } = useAttendanceStore();
   
-  const punchFileRef = useRef<HTMLInputElement>(null);
-  const scheduleFileRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const handlePunchFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,11 +49,11 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
   };
 
   const validateFile = (file: File): boolean => {
-    const validExtensions = ['.xlsx', '.xls'];
+    const validExtensions = ['.xlsx', '.xls', '.csv'];
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
     
     if (!validExtensions.includes(fileExtension)) {
-      setError(`Invalid file type. Please upload .xlsx or .xls files only.`);
+      setError(`Invalid file type. Please upload .xlsx, .xls, or .csv files only.`);
       return false;
     }
     
@@ -65,9 +65,17 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
     return true;
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && validateFile(file)) {
+      setAttendanceFile({ file, status: 'ready' });
+      setError(null);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!punchFile || !scheduleFile) {
-      setError('Please upload both punch clock and schedule files');
+    if (!attendanceFile) {
+      setError('Please upload an attendance file');
       return;
     }
 
@@ -76,48 +84,29 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
     setError(null);
 
     try {
-      // Simulate progress for UI feedback
-      const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 15, 90));
-      }, 300);
-
-      try {
-        // Process files directly in the browser
-        const result = await processAttendanceFiles(punchFile.file, scheduleFile.file);
-        
-        clearInterval(progressInterval);
-        setProgress(100);
-        
-        // Convert to expected format
-        const processedData = {
-          employee_name: result.employee_name,
-          summary: result.summary,
-          day_level: result.day_level,
-          config_used: {
-            am: { start: "09:45", end: "16:30", cross_midnight: false },
-            pm: { start: "16:00", end: "00:15", cross_midnight: true },
-            tardy_minutes: 5,
-            early_minutes: 15,
-            timezone: "America/New_York"
-          }
-        };
-        
-        onDataProcessed(processedData);
-        
-        toast({
-          title: "Files processed successfully!",
-          description: `Analysis complete for ${result.employee_name}${result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : ''}`,
-        });
-        
-        if (result.warnings.length > 0) {
-          console.warn('Processing warnings:', result.warnings);
-        }
-        
-      } catch (processingError) {
-        clearInterval(progressInterval);
-        const errorMessage = processingError instanceof Error ? processingError.message : 'Failed to process files';
-        throw new Error(errorMessage);
+      setProgress(30);
+      
+      const result = await processCSVFile(attendanceFile.file);
+      
+      setProgress(70);
+      
+      if (result.records.length === 0) {
+        throw new Error('No valid attendance records found in file');
       }
+      
+      setRecords(result.records);
+      setProgress(100);
+      
+      toast({
+        title: "Files processed successfully!",
+        description: `${result.records.length} attendance records processed${result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : ''}`,
+      });
+      
+      if (result.warnings.length > 0) {
+        console.warn('Processing warnings:', result.warnings);
+      }
+      
+      onDataProcessed(result);
 
     } catch (err) {
       console.error('Processing error:', err);

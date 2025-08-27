@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X, Info, Users, Calendar, FileText } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X, Info, Users, Calendar, FileText, Brain } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAttendanceStore } from '@/store/attendanceStore';
-import { analyzeFile, FileInsights } from '@/lib/fileAnalyzer';
+import { analyzeFile, FileInsights, getAIAnalysis, AIAnalysis, ColumnMapping } from '@/lib/fileAnalyzer';
 import { processExcelFile, processCSVFile, ProcessedData } from '@/lib/excelProcessor';
 import { mergeAttendanceFiles } from '@/lib/attendanceMerger';
+import { normalizeData, NormalizedData } from '@/lib/dataNormalizer';
+import { AIAnalysisPanel } from './AIAnalysisPanel';
 
 interface FileUploaderProps {
   onDataProcessed: (data: any) => void;
@@ -22,6 +24,9 @@ interface UploadedFile {
   status: 'ready' | 'analyzing' | 'analyzed' | 'error';
   insights?: FileInsights;
   processedData?: ProcessedData;
+  aiAnalysis?: AIAnalysis;
+  isLoadingAI?: boolean;
+  normalizedData?: NormalizedData;
 }
 
 export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileUploaderProps) => {
@@ -112,9 +117,28 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
     try {
       setProgress(30);
       
-      const file1Data = { insights: file1.insights, processedData: file1.processedData };
-      const file2Data = file2?.insights && file2?.processedData 
-        ? { insights: file2.insights, processedData: file2.processedData }
+      // Use normalized data if available, otherwise use processed data
+      const file1ProcessedData = file1.normalizedData ? {
+        headers: file1.normalizedData.headers,
+        rows: file1.normalizedData.rows,
+        metadata: {
+          ...file1.processedData.metadata,
+          ...file1.normalizedData.metadata
+        }
+      } : file1.processedData;
+
+      const file2ProcessedData = file2?.normalizedData ? {
+        headers: file2.normalizedData.headers,
+        rows: file2.normalizedData.rows,
+        metadata: {
+          ...file2.processedData!.metadata,
+          ...file2.normalizedData.metadata
+        }
+      } : file2?.processedData;
+      
+      const file1Data = { insights: file1.insights, processedData: file1ProcessedData };
+      const file2Data = file2?.insights && file2ProcessedData 
+        ? { insights: file2.insights, processedData: file2ProcessedData }
         : undefined;
 
       const result = mergeAttendanceFiles(file1Data, file2Data);
@@ -128,9 +152,18 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
       setRecords(result.records);
       setProgress(100);
       
+      // Enhanced success message with normalization info
+      const normalizationInfo = [];
+      if (file1.normalizedData) {
+        normalizationInfo.push(`File 1: ${file1.normalizedData.metadata.mappingsApplied.length} column mappings applied`);
+      }
+      if (file2?.normalizedData) {
+        normalizationInfo.push(`File 2: ${file2.normalizedData.metadata.mappingsApplied.length} column mappings applied`);
+      }
+      
       toast({
         title: "Files processed successfully!",
-        description: `${result.records.length} attendance records from ${result.summary.filesProcessed.length} file(s)${result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : ''}`,
+        description: `${result.records.length} attendance records from ${result.summary.filesProcessed.length} file(s)${result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : ''}${normalizationInfo.length > 0 ? `. ${normalizationInfo.join(', ')}` : ''}`,
       });
       
       if (result.warnings.length > 0) {
@@ -152,6 +185,128 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
       setIsLoading(false);
       setProgress(0);
     }
+  };
+
+  // AI Analysis Handlers
+  const handleRunAIAnalysis = async (fileNumber: 1 | 2) => {
+    const targetFile = fileNumber === 1 ? file1 : file2;
+    if (!targetFile?.insights || !targetFile?.processedData) return;
+
+    // Set loading state
+    const updatedFile = { 
+      ...targetFile, 
+      isLoadingAI: true 
+    };
+    
+    if (fileNumber === 1) {
+      setFile1(updatedFile);
+    } else {
+      setFile2(updatedFile);
+    }
+
+    try {
+      const sampleRows = targetFile.processedData.rows.slice(0, 5);
+      const aiAnalysis = await getAIAnalysis(
+        targetFile.insights.fileName,
+        targetFile.insights.keyColumns,
+        sampleRows,
+        {
+          type: targetFile.insights.fileType,
+          confidence: targetFile.insights.confidence
+        }
+      );
+
+      const analyzedFile = {
+        ...targetFile,
+        aiAnalysis,
+        isLoadingAI: false
+      };
+
+      if (fileNumber === 1) {
+        setFile1(analyzedFile);
+      } else {
+        setFile2(analyzedFile);
+      }
+
+      toast({
+        title: "AI analysis complete",
+        description: `Found ${aiAnalysis.columnMappings.length} column mappings with ${aiAnalysis.confidence}% confidence`,
+      });
+
+    } catch (error) {
+      console.error('AI Analysis Error:', error);
+      
+      const errorFile = {
+        ...targetFile,
+        isLoadingAI: false
+      };
+
+      if (fileNumber === 1) {
+        setFile1(errorFile);
+      } else {
+        setFile2(errorFile);
+      }
+
+      toast({
+        title: "AI analysis failed",
+        description: error instanceof Error ? error.message : 'Unable to analyze file with AI',
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveMapping = (fileNumber: 1 | 2, mappings: ColumnMapping[]) => {
+    const targetFile = fileNumber === 1 ? file1 : file2;
+    if (!targetFile?.processedData) return;
+
+    try {
+      const normalizedData = normalizeData(targetFile.processedData, mappings);
+      
+      const updatedFile = {
+        ...targetFile,
+        normalizedData
+      };
+
+      if (fileNumber === 1) {
+        setFile1(updatedFile);
+      } else {
+        setFile2(updatedFile);
+      }
+
+      toast({
+        title: "Column mappings applied",
+        description: `Normalized ${normalizedData.metadata.rowsProcessed} rows with ${mappings.length} mappings`,
+      });
+
+    } catch (error) {
+      console.error('Normalization Error:', error);
+      toast({
+        title: "Normalization failed",
+        description: error instanceof Error ? error.message : 'Failed to apply column mappings',
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectAnalysis = (fileNumber: 1 | 2) => {
+    const targetFile = fileNumber === 1 ? file1 : file2;
+    if (!targetFile) return;
+
+    const updatedFile = {
+      ...targetFile,
+      aiAnalysis: undefined
+    };
+
+    if (fileNumber === 1) {
+      setFile1(updatedFile);
+    } else {
+      setFile2(updatedFile);
+    }
+
+    toast({
+      title: "AI analysis dismissed",
+      description: "Using original file analysis",
+    });
   };
 
   const removeFile = (fileNumber: 1 | 2) => {
@@ -334,19 +489,63 @@ export const FileUploader = ({ onDataProcessed, isLoading, setIsLoading }: FileU
         </div>
       )}
 
+      {/* AI Analysis Panels */}
+      {((file1?.insights?.needsAIReview || file1?.aiAnalysis || file1?.isLoadingAI) || 
+        (file2?.insights?.needsAIReview || file2?.aiAnalysis || file2?.isLoadingAI)) && (
+        <div className="space-y-4">
+          <h3 className="font-medium flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            AI Analysis
+          </h3>
+          <div className="grid gap-4">
+            {file1 && (file1.insights?.needsAIReview || file1.aiAnalysis || file1.isLoadingAI) && (
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-muted-foreground">
+                  File 1: {file1.insights?.fileName}
+                </h4>
+                <AIAnalysisPanel
+                  fileName={file1.insights?.fileName || file1.file.name}
+                  aiAnalysis={file1.aiAnalysis}
+                  isLoading={file1.isLoadingAI || false}
+                  onRunAIAnalysis={() => handleRunAIAnalysis(1)}
+                  onApproveMapping={(mappings) => handleApproveMapping(1, mappings)}
+                  onRejectAnalysis={() => handleRejectAnalysis(1)}
+                />
+              </div>
+            )}
+            
+            {file2 && (file2.insights?.needsAIReview || file2.aiAnalysis || file2.isLoadingAI) && (
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-muted-foreground">
+                  File 2: {file2.insights?.fileName}
+                </h4>
+                <AIAnalysisPanel
+                  fileName={file2.insights?.fileName || file2.file.name}
+                  aiAnalysis={file2.aiAnalysis}
+                  isLoading={file2.isLoadingAI || false}
+                  onRunAIAnalysis={() => handleRunAIAnalysis(2)}
+                  onApproveMapping={(mappings) => handleApproveMapping(2, mappings)}
+                  onRejectAnalysis={() => handleRejectAnalysis(2)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Processing Notice */}
-      <div className="bg-success/10 border border-success/20 p-4 rounded-lg">
+      <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded-lg">
         <div className="flex items-start gap-3">
-          <div className="p-1 bg-success/10 rounded">
-            <CheckCircle className="h-4 w-4 text-success" />
+          <div className="p-1 bg-blue-100 dark:bg-blue-900 rounded">
+            <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="text-sm">
-            <p className="font-medium text-success">Client-Side Processing</p>
-            <p className="text-muted-foreground mt-1">
-              Your file is processed securely in your browser - no data is sent to external servers.
+            <p className="font-medium text-blue-800 dark:text-blue-200">Smart File Processing</p>
+            <p className="text-blue-700 dark:text-blue-300 mt-1">
+              Files are processed locally in your browser. AI analysis is available for ambiguous files to improve column mapping accuracy.
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Expected columns: employee_name, employee_id, store, date, shift, scheduled_in, scheduled_out, actual_in, actual_out, status
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+              Standard fields: employee_name, employee_id, store, date, shift, scheduled_in, scheduled_out, actual_in, actual_out, status
             </p>
           </div>
         </div>
